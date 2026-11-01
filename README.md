@@ -1,5 +1,7 @@
 # kyro
 
+[![CI](https://github.com/mistermerlin/kyro-routing/actions/workflows/ci.yml/badge.svg)](https://github.com/mistermerlin/kyro-routing/actions/workflows/ci.yml)
+
 Symfony-style attribute routing for Django: declare routes with decorators directly on
 your views and controllers instead of maintaining a long `urls.py`.
 
