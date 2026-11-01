@@ -1,0 +1,68 @@
+name: Release
+
+# A version tag (v0.1.0) publishes to TestPyPI, then PyPI.
+# A manual run publishes to TestPyPI only, to try a release out.
+on:
+  push:
+    tags: ["v[0-9]*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+      - run: uv build
+      - name: Check that the tag matches the package version
+        if: github.ref_type == 'tag'
+        run: |
+          wheel="dist/kyro_routing-${GITHUB_REF_NAME#v}-py3-none-any.whl"
+          if [ ! -f "$wheel" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match the built package: $(ls dist)"
+            exit 1
+          fi
+      - name: Check that the wheel installs and imports
+        run: uv run --isolated --no-project --with dist/*.whl python -c "import kyro.checks, kyro; print(kyro.__version__)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  testpypi:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/kyro-routing
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          # A version already tried out with a manual run is kept as is.
+          skip-existing: true
+
+  pypi:
+    needs: testpypi
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/kyro-routing
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1

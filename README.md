@@ -180,3 +180,11 @@ uv run ruff check .  # lint
 uv run ruff format . # format
 uv run python -m mypy # type check (strict)
 ```
+
+## Releasing
+
+1. Set the version in `src/kyro/__init__.py` (`__version__`), and in `CHANGELOG.md` rename
+   `[Unreleased]` to `[x.y.z] - YYYY-MM-DD` and update the links at the bottom.
+2. Optionally, try the release out on TestPyPI: *Actions → Release → Run workflow*.
+3. Commit, tag and push: `git tag vx.y.z && git push origin main vx.y.z`. The `Release`
+   workflow publishes to TestPyPI, then PyPI.
