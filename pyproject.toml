@@ -1,6 +1,6 @@
 [project]
 name = "kyro-routing"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Symfony-style attribute routing for Django: declare routes with decorators on views and controllers."
 readme = "README.md"
 license = "MIT"
@@ -40,6 +40,9 @@ Changelog = "https://github.com/mistermerlin/kyro-routing/blob/main/CHANGELOG.md
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "src/kyro/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/kyro"]
