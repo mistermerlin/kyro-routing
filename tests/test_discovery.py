@@ -42,3 +42,12 @@ def test_discover_filters_by_module():
     names = {pattern.name for pattern in kyro.discover(["tests.testapp"])}
     assert {"hello", "decorated", "article_show", "post_index", "about"} <= names
     assert kyro.discover(["django.contrib.auth.views"]) == []
+
+
+def test_discover_imports_the_views_of_a_package():
+    import sys
+
+    from tests.otherapp import router
+
+    assert "tests.otherapp.views" not in sys.modules
+    assert [pattern.name for pattern in router.discover(["tests.otherapp"])] == ["other"]

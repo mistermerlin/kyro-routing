@@ -124,8 +124,9 @@ $ python manage.py debug_router
 
 - `KYRO_DISCOVER` (default `["views"]`): app submodules imported by `kyro.discover()`.
 
-`kyro.discover(["blog.views"])` imports the given modules and returns only their routes, to
-mount them under a prefix: `path("blog/", include(kyro.discover(["blog.views"])))`.
+`kyro.discover(["blog"])` imports the given modules (for a package, its `KYRO_DISCOVER`
+submodules too) and returns only their routes, to mount them under a prefix:
+`path("blog/", include(kyro.discover(["blog"])))`.
 
 ## Development
 

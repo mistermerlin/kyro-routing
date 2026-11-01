@@ -15,7 +15,7 @@ from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.urls import URLPattern
 from django.urls import path as django_path
-from django.utils.module_loading import autodiscover_modules
+from django.utils.module_loading import autodiscover_modules, module_has_submodule
 from django.views import View
 
 from kyro.dispatch import Handler, make_view
@@ -126,14 +126,20 @@ class Router:
 
         Without ``modules``, imports the ``KYRO_DISCOVER`` submodules (default ``["views"]``)
         of every installed app and returns all routes. With ``modules`` (dotted paths),
-        imports them and returns only the routes they, or their submodules, declare.
+        imports them, and the ``KYRO_DISCOVER`` submodules of those that are packages, and
+        returns only the routes they, or their submodules, declare.
         """
+        submodules = getattr(settings, "KYRO_DISCOVER", ["views"])
         if modules is None:
-            autodiscover_modules(*getattr(settings, "KYRO_DISCOVER", ["views"]))
+            autodiscover_modules(*submodules)
             return self.urlpatterns()
         modules = list(modules)
-        for module in modules:
-            import_module(module)
+        for name in modules:
+            module = import_module(name)
+            if hasattr(module, "__path__"):
+                for submodule in submodules:
+                    if module_has_submodule(module, submodule):
+                        import_module(f"{name}.{submodule}")
         return self.urlpatterns(modules)
 
     def urlpatterns(self, modules: Iterable[str] | None = None) -> list[URLPattern]:
