@@ -98,6 +98,28 @@ Annotated view arguments are converted from the URL:
 
   A missing object is a 404, or `None` when the annotation is optional (`Post | None`).
 
+## Debugging routes
+
+With `"kyro"` in `INSTALLED_APPS`, `manage.py debug_router` lists every route of the
+project, kyro or not, in matching order:
+
+```text
+$ python manage.py debug_router
+ -------------- ---------- ------------------
+  Name           Method     Path
+ -------------- ---------- ------------------
+  blog_index     GET|HEAD   /blog
+  blog_create    POST       /blog
+  blog_show      ANY        /blog/{slug}
+ -------------- ---------- ------------------
+```
+
+- `debug_router blog_show` shows one route in detail: Django routes, requirements,
+  defaults, priority, view and the file and line where it is declared. A partial name shows
+  the detail when it matches one route, the list of matches otherwise.
+- `--show-views` adds the view of each route to the list, `--format json` outputs JSON and
+  `--urlconf` inspects another URLconf than `ROOT_URLCONF`.
+
 ## Settings
 
 - `KYRO_DISCOVER` (default `["views"]`): app submodules imported by `kyro.discover()`.

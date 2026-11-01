@@ -77,6 +77,7 @@ def _sanitize_regex(regex: str) -> str:
 class _Param:
     name: str
     converter: str | None
+    regex: str | None
     default: Any
 
     @property
@@ -109,6 +110,46 @@ def compile_path(
     defaults: Mapping[str, Any] | None = None,
 ) -> list[CompiledRoute]:
     """Compile ``path`` into Django routes, the most specific first."""
+    tokens, extra = _tokenize(path, requirements, defaults)
+    cuts = [len(tokens), *reversed(_optional_indexes(tokens))]
+    compiled = []
+    for cut in cuts:
+        kept = list(tokens[:cut])
+        last = kept[-1] if kept else None
+        if cut < len(tokens) and isinstance(last, str) and last and last[-1] in SEPARATORS:
+            kept[-1] = last[:-1]
+        dropped = [token for token in tokens[cut:] if isinstance(token, _Param)]
+        route = "".join(token if isinstance(token, str) else token.render() for token in kept)
+        compiled.append(
+            CompiledRoute(
+                route=route.removeprefix("/"),
+                defaults={**extra, **{param.name: param.default for param in dropped}},
+                params=tuple(token.name for token in kept if isinstance(token, _Param)),
+            )
+        )
+    return compiled
+
+
+def describe_path(
+    path: str,
+    requirements: Mapping[str, str] | None = None,
+    defaults: Mapping[str, Any] | None = None,
+) -> tuple[dict[str, str], dict[str, Any]]:
+    """All requirements and defaults of a route, inline ones included."""
+    tokens, extra = _tokenize(path, requirements, defaults)
+    params = [token for token in tokens if isinstance(token, _Param)]
+    return (
+        {param.name: param.regex for param in params if param.regex is not None},
+        {**{param.name: param.default for param in params if param.optional}, **extra},
+    )
+
+
+def _tokenize(
+    path: str,
+    requirements: Mapping[str, str] | None,
+    defaults: Mapping[str, Any] | None,
+) -> tuple[list[str | _Param], dict[str, Any]]:
+    """Split ``path`` into literals and parameters; also return the non-path defaults."""
     requirements = dict(requirements or {})
     defaults = dict(defaults or {})
 
@@ -132,24 +173,7 @@ def compile_path(
             f"Route {path!r} has requirements for unknown parameter(s) {unknown}."
         )
     extra = {key: value for key, value in defaults.items() if key not in names}
-
-    cuts = [len(tokens), *reversed(_optional_indexes(tokens))]
-    compiled = []
-    for cut in cuts:
-        kept = list(tokens[:cut])
-        last = kept[-1] if kept else None
-        if cut < len(tokens) and isinstance(last, str) and last and last[-1] in SEPARATORS:
-            kept[-1] = last[:-1]
-        dropped = [token for token in tokens[cut:] if isinstance(token, _Param)]
-        route = "".join(token if isinstance(token, str) else token.render() for token in kept)
-        compiled.append(
-            CompiledRoute(
-                route=route.removeprefix("/"),
-                defaults={**extra, **{param.name: param.default for param in dropped}},
-                params=tuple(token.name for token in kept if isinstance(token, _Param)),
-            )
-        )
-    return compiled
+    return tokens, extra
 
 
 def _make_param(
@@ -177,8 +201,9 @@ def _make_param(
             raise ImproperlyConfigured(f"Route {path!r}: parameter {name!r} has two defaults.")
         default = defaults[name]
     if regex is not None:
+        regex = _sanitize_regex(regex)
         converter = regex_converter(regex)
-    return _Param(name, converter, default)
+    return _Param(name, converter, regex, default)
 
 
 def _optional_indexes(tokens: list[str | _Param]) -> list[int]:

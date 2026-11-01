@@ -55,7 +55,12 @@ class RouteSet:
 
 
 @dataclass
-class _Route:
+class Route:
+    """A declared route, once merged with its class prefix.
+
+    Each URL pattern built by kyro carries its route as ``pattern.kyro_route``.
+    """
+
     path: str
     name: str
     methods: frozenset[str]
@@ -66,6 +71,8 @@ class _Route:
     view: Callable[..., Any]
     signature: Callable[..., Any] | None
     """Callable whose signature drives parameter conversion; ``None`` disables it."""
+    source: Any
+    """What ``@route`` was declared on: function, method or class."""
 
 
 class Router:
@@ -139,7 +146,7 @@ class Router:
         routes.sort(key=lambda r: -r.priority)
         _check_names(routes)
 
-        groups: dict[str, list[tuple[_Route, Any]]] = {}
+        groups: dict[str, list[tuple[Route, Any]]] = {}
         for route in routes:
             for compiled in compile_path(route.path, route.requirements, route.defaults):
                 groups.setdefault(compiled.route, []).append((route, compiled))
@@ -158,7 +165,9 @@ class Router:
             # every route name can be reversed.
             for route, compiled in members:
                 view = make_view(handlers, compiled.defaults)
-                patterns.append(django_path(route_str, view, compiled.defaults, name=route.name))
+                pattern = django_path(route_str, view, compiled.defaults, name=route.name)
+                pattern.kyro_route = route  # type: ignore[attr-defined]
+                patterns.append(pattern)
         return patterns
 
     def _route_function(self, func: Callable[..., Any], spec: RouteSpec) -> None:
@@ -181,14 +190,14 @@ class Router:
                 routes.owner, routes.attr = cls, attr
         self._targets.append(cls)
 
-    def _collect(self) -> Iterator[_Route]:
+    def _collect(self) -> Iterator[Route]:
         for target in self._targets:
             if isinstance(target, type):
                 yield from self._class_routes(target)
             else:
                 yield from self._function_routes(target)
 
-    def _function_routes(self, func: Callable[..., Any]) -> Iterator[_Route]:
+    def _function_routes(self, func: Callable[..., Any]) -> Iterator[Route]:
         routes: RouteSet = getattr(func, ROUTES_ATTR)
         owner, attr = _owner(func, routes)
         if owner is None or attr is None:
@@ -208,18 +217,18 @@ class Router:
         specs = [spec for router, spec in routes.entries if router is self]
         for index, spec in enumerate(specs):
             name = auto_name + (f"_{index}" if index else "")
-            yield _make_route(spec, prefix, name, module, view, signature)
+            yield _make_route(spec, prefix, name, module, view, signature, signature)
 
-    def _class_routes(self, cls: type) -> Iterator[_Route]:
+    def _class_routes(self, cls: type) -> Iterator[Route]:
         _, spec = vars(cls)[CLASS_ROUTE_ATTR]
         auto_name = _slug(f"{cls.__module__}.{_snake(cls.__name__)}")
         if issubclass(cls, View):
-            yield _make_route(spec, None, auto_name, cls.__module__, cls.as_view(), None)
+            yield _make_route(spec, None, auto_name, cls.__module__, cls.as_view(), None, cls)
         elif _has_routed_methods(cls):
             return  # The class route is the prefix of its methods.
         elif any("__call__" in vars(klass) for klass in cls.__mro__[:-1]):
             view, signature = _method_view(cls, "__call__")
-            yield _make_route(spec, None, auto_name, cls.__module__, view, signature)
+            yield _make_route(spec, None, auto_name, cls.__module__, view, signature, cls)
         else:
             raise ImproperlyConfigured(
                 f"@route on {cls.__qualname__}: the class has no routed method, no __call__ "
@@ -240,10 +249,11 @@ def _make_route(
     module: str,
     view: Callable[..., Any],
     signature: Callable[..., Any] | None,
-) -> _Route:
+    source: Any,
+) -> Route:
     prefix = prefix or RouteSpec()
     priority = next((p for p in (spec.priority, prefix.priority) if p is not None), 0)
-    return _Route(
+    return Route(
         path=prefix.path + spec.path,
         name=(prefix.name or "") + spec.name if spec.name is not None else auto_name,
         methods=spec.methods or prefix.methods,
@@ -253,6 +263,7 @@ def _make_route(
         module=module,
         view=view,
         signature=signature,
+        source=source,
     )
 
 
@@ -322,8 +333,8 @@ def _has_routed_methods(cls: type) -> bool:
     return any(isinstance(getattr(v, ROUTES_ATTR, None), RouteSet) for v in vars(cls).values())
 
 
-def _check_names(routes: list[_Route]) -> None:
-    seen: dict[str, _Route] = {}
+def _check_names(routes: list[Route]) -> None:
+    seen: dict[str, Route] = {}
     for route in routes:
         other = seen.setdefault(route.name, route)
         if other is not route:
@@ -333,7 +344,7 @@ def _check_names(routes: list[_Route]) -> None:
             )
 
 
-def _describe(route: _Route) -> str:
+def _describe(route: Route) -> str:
     return f"{route.view.__module__}.{route.view.__qualname__} ({route.path!r})"
 
 

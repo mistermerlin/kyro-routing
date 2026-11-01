@@ -55,3 +55,8 @@ class PostController:
 class AboutView(View):
     def get(self, request):
         return HttpResponse("about")
+
+
+@route(r"/archive/{page<\d+>?1}", name="archive", defaults={"format": "html"})
+def archive(request, page: int, format):
+    return HttpResponse(f"archive {page}")
