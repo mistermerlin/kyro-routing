@@ -114,7 +114,7 @@ class Router:
                 self._route_class(target, spec)
             elif isinstance(target, (staticmethod, classmethod)):
                 raise TypeError("Static and class methods cannot be routed.")
-            elif inspect.isfunction(inspect.unwrap(target)):  # type: ignore[arg-type]
+            elif callable(target) and inspect.isfunction(inspect.unwrap(target)):
                 self._route_function(target, spec)
             else:
                 raise TypeError(f"@route cannot decorate {target!r}.")
@@ -249,7 +249,7 @@ class Router:
             )
 
     def _prefix(self, owner: type) -> RouteSpec | None:
-        declared = vars(owner).get(CLASS_ROUTE_ATTR)
+        declared: tuple[Router, RouteSpec] | None = vars(owner).get(CLASS_ROUTE_ATTR)
         if declared is not None and declared[0] is self:
             return declared[1]
         return None
@@ -288,21 +288,25 @@ def _method_view(owner: type, attr: str) -> tuple[Callable[..., Any], Callable[.
             f"{owner.__qualname__}.{attr}: static and class methods cannot be routed."
         )
 
+    view: Any
     if iscoroutinefunction(member):
 
-        async def view(request: Any, **kwargs: Any) -> Any:
+        async def async_view(request: Any, **kwargs: Any) -> Any:
             return await getattr(owner(), attr)(request, **kwargs)
 
+        view = async_view
     else:
 
-        def view(request: Any, **kwargs: Any) -> Any:
+        def sync_view(request: Any, **kwargs: Any) -> Any:
             return getattr(owner(), attr)(request, **kwargs)
+
+        view = sync_view
 
     view.__module__ = owner.__module__
     view.__name__ = attr
     view.__qualname__ = f"{owner.__qualname__}.{attr}"
     view.__doc__ = member.__doc__
-    view.controller_class = owner  # type: ignore[attr-defined]
+    view.controller_class = owner
     return view, member
 
 

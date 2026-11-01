@@ -228,7 +228,7 @@ def _optional_indexes(tokens: list[str | _Param]) -> list[int]:
     """
     indexes: list[int] = []
     i = len(tokens) - 1
-    while i >= 0 and isinstance(tokens[i], _Param) and tokens[i].optional:
+    while i >= 0 and isinstance(token := tokens[i], _Param) and token.optional:
         indexes.append(i)
         i -= 1
         between = tokens[i] if i >= 0 else None

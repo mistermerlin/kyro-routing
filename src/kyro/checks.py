@@ -35,7 +35,7 @@ def check_routes(app_configs: Any = None, **kwargs: Any) -> list[CheckMessage]:
 
 
 def _check_shadowed(table: RouteTable) -> list[CheckMessage]:
-    messages = []
+    messages: list[CheckMessage] = []
     for info, _ in table.declarations():
         url = next((r for r in info.django_routes if not _REGEX_CHARS.search(r)), None)
         if url is None:
@@ -46,7 +46,7 @@ def _check_shadowed(table: RouteTable) -> list[CheckMessage]:
         shadowed = {
             method: result.route
             for method, result in table.match_methods(url, tried).items()
-            if result.status == MATCH and result.route is not info
+            if result.status == MATCH and result.route is not None and result.route is not info
         }
         if not shadowed:
             continue
@@ -104,7 +104,7 @@ def _check_unmounted(table: RouteTable) -> list[CheckMessage]:
 
 
 def _check_ignored_defaults(table: RouteTable) -> list[CheckMessage]:
-    messages = []
+    messages: list[CheckMessage] = []
     for info, route in table.declarations():
         for name in ignored_defaults(route.path, route.requirements, route.defaults):
             messages.append(

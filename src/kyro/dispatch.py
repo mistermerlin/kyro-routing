@@ -43,25 +43,29 @@ def make_view(handlers: list[Handler], own_defaults: Mapping[str, Any]) -> Calla
                 return index, {**handler.defaults, **captured}
         return None, kwargs
 
+    view: Callable[..., Any]
     if all(iscoroutinefunction(handler.view) for handler in handlers):
 
-        async def view(request: Any, **kwargs: Any) -> Any:
+        async def async_view(request: Any, **kwargs: Any) -> Any:
             index, kwargs = select(request, kwargs)
             if index is None:
                 return HttpResponseNotAllowed(allowed)
             return await handlers[index].view(request, **kwargs)
 
+        view = async_view
     else:
         calls = [
             async_to_sync(handler.view) if iscoroutinefunction(handler.view) else handler.view
             for handler in handlers
         ]
 
-        def view(request: Any, **kwargs: Any) -> Any:
+        def sync_view(request: Any, **kwargs: Any) -> Any:
             index, kwargs = select(request, kwargs)
             if index is None:
                 return HttpResponseNotAllowed(allowed)
             return calls[index](request, **kwargs)
+
+        view = sync_view
 
     if len(handlers) == 1:
         functools.update_wrapper(view, handlers[0].view)

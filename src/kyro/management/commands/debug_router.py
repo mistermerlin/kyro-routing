@@ -1,4 +1,6 @@
-from django.core.management.base import BaseCommand, CommandError
+from typing import Any
+
+from django.core.management.base import BaseCommand, CommandError, CommandParser
 
 from kyro.inspection import collect_routes
 from kyro.management.output import detail_rows, dumps, methods_label, write_table
@@ -7,7 +9,7 @@ from kyro.management.output import detail_rows, dumps, methods_label, write_tabl
 class Command(BaseCommand):
     help = "List the routes of the project, or show the details of one route."
 
-    def add_arguments(self, parser):
+    def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "name",
             nargs="?",
@@ -19,8 +21,9 @@ class Command(BaseCommand):
         )
         parser.add_argument("--urlconf", help="URLconf module to inspect (default: ROOT_URLCONF).")
 
-    def handle(self, *args, name=None, format="txt", show_views=False, urlconf=None, **options):
-        routes = collect_routes(urlconf)
+    def handle(self, *args: Any, **options: Any) -> None:
+        name, as_json = options["name"], options["format"] == "json"
+        routes = collect_routes(options["urlconf"])
         if name is not None:
             routes = [r for r in routes if r.name == name] or [
                 r for r in routes if r.name and name in r.name
@@ -28,15 +31,16 @@ class Command(BaseCommand):
             if not routes:
                 raise CommandError(f"No route matches {name!r}.")
             if len(routes) == 1:
-                if format == "json":
+                if as_json:
                     self.stdout.write(dumps(routes[0].as_dict()))
                 else:
                     write_table(self, ["Property", "Value"], detail_rows(routes[0]))
                 return
 
-        if format == "json":
+        if as_json:
             self.stdout.write(dumps([route.as_dict() for route in routes]))
             return
+        show_views = options["show_views"]
         headers = ["Name", "Method", "Path"] + (["View"] if show_views else [])
         rows = [
             [route.name or "", methods_label(route.methods), route.path]

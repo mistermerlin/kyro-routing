@@ -25,7 +25,12 @@ from typing import Annotated, Any, Union, get_args, get_origin, get_type_hints
 from uuid import UUID
 
 from asgiref.sync import iscoroutinefunction, sync_to_async
-from django.core.exceptions import FieldDoesNotExist, ImproperlyConfigured, ValidationError
+from django.core.exceptions import (
+    FieldDoesNotExist,
+    ImproperlyConfigured,
+    ObjectDoesNotExist,
+    ValidationError,
+)
 from django.db import models
 from django.http import Http404
 
@@ -60,17 +65,21 @@ def with_conversion(
     if convert is None:
         return view
 
+    wrapper: Callable[..., Any]
     if iscoroutinefunction(view):
         convert_async = sync_to_async(convert) if convert.uses_db else None
 
-        async def wrapper(request: Any, **kwargs: Any) -> Any:
+        async def async_wrapper(request: Any, **kwargs: Any) -> Any:
             kwargs = await convert_async(kwargs) if convert_async else convert(kwargs)
             return await view(request, **kwargs)
 
+        wrapper = async_wrapper
     else:
 
-        def wrapper(request: Any, **kwargs: Any) -> Any:
+        def sync_wrapper(request: Any, **kwargs: Any) -> Any:
             return view(request, **convert(kwargs))
+
+        wrapper = sync_wrapper
 
     functools.update_wrapper(wrapper, view)
     return wrapper
@@ -85,7 +94,7 @@ def build_converter(func: Callable[..., Any], url_kwargs: Iterable[str]) -> _Con
     accepted = {name for name, p in signature.parameters.items() if p.kind in named}
     accepts_any = any(p.kind is p.VAR_KEYWORD for p in signature.parameters.values())
 
-    scalars: list[tuple[str, type]] = []
+    scalars: list[tuple[str, type[Any]]] = []
     model_params: list[
         tuple[str, type[models.Model], MapModel | None, bool, inspect.Parameter]
     ] = []
@@ -150,9 +159,10 @@ class _Lookup:
         values = {field: kwargs.get(param) for field, param in self.lookup.items()}
         try:
             if any(value is None for value in values.values()):
-                raise self.model.DoesNotExist
-            return self.model._default_manager.get(**values)
-        except (self.model.DoesNotExist, ValueError, TypeError, ValidationError):
+                raise ObjectDoesNotExist
+            found: models.Model = self.model._default_manager.get(**values)
+            return found
+        except (ObjectDoesNotExist, ValueError, TypeError, ValidationError):
             if self.optional:
                 return None
             raise Http404(f"No {self.model._meta.object_name} matches the given query.") from None
@@ -160,7 +170,7 @@ class _Lookup:
 
 class _Converter:
     def __init__(
-        self, scalars: list[tuple[str, type]], lookups: list[_Lookup], drop: set[str]
+        self, scalars: list[tuple[str, type[Any]]], lookups: list[_Lookup], drop: set[str]
     ) -> None:
         self.scalars = scalars
         self.lookups = lookups
@@ -179,7 +189,7 @@ class _Converter:
         return converted
 
 
-def _to_scalar(value: Any, typ: type) -> Any:
+def _to_scalar(value: Any, typ: type[Any]) -> Any:
     if value is None or (isinstance(value, typ) and not (typ is int and isinstance(value, bool))):
         return value
     text = str(value)

@@ -5,5 +5,5 @@ class Post(models.Model):
     title = models.CharField(max_length=200)
     slug = models.SlugField(unique=True)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.title

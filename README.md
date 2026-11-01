@@ -176,4 +176,5 @@ uv sync              # create .venv and install dependencies
 uv run pytest        # run the test suite
 uv run ruff check .  # lint
 uv run ruff format . # format
+uv run python -m mypy # type check (strict)
 ```
