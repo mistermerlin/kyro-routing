@@ -104,6 +104,19 @@ def test_optional_parameter_shadows_a_static_route(router, mount):
     ]
 
 
+def test_route_shadowed_only_without_its_optional_parameter(router, mount):
+    router.route("/blog/{slug}", name="show")(view)
+
+    @router.route(r"/blog/page/{page<\d+>?1}", name="list")
+    def listing(request, page):
+        return HttpResponse()
+
+    mount(router)
+    assert [m.msg for m in check_routes()] == [
+        "Route 'list' is not reached at /blog/page: it is served by 'show'."
+    ]
+
+
 def test_route_shadowed_by_a_django_route(router, urlconf):
     @router.route("/about", name="about")
     def about(request):

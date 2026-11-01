@@ -51,13 +51,17 @@ def _check_shadowed(table: RouteTable) -> list[CheckMessage]:
         if not shadowed:
             continue
         culprits = ", ".join(sorted({_label(route) for route in shadowed.values()}))
-        if len(shadowed) == len(tried):
-            reached = "is never reached"
+        methods = "" if len(shadowed) == len(tried) else f" for {', '.join(shadowed)}"
+        if len(info.django_routes) > 1:
+            # Only this URL of the route is shadowed (optional parameters omitted).
+            message = f"is not reached at {url}{methods}: it is served by {culprits}."
+        elif methods:
+            message = f"is not reached{methods}: {url} is served by {culprits}."
         else:
-            reached = f"is not reached for {', '.join(shadowed)}"
+            message = f"is never reached: {url} is served by {culprits}."
         messages.append(
             Warning(
-                f"Route {_label(info)} {reached}: {url} is served by {culprits}.",
+                f"Route {_label(info)} {message}",
                 hint="Declare it before the routes shadowing it, or give it a higher priority.",
                 obj=_obj(info),
                 id="kyro.W001",
