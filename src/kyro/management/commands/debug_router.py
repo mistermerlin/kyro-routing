@@ -7,6 +7,8 @@ from kyro.management.output import detail_rows, dumps, methods_label, write_tabl
 
 
 class Command(BaseCommand):
+    # A diagnostic tool: it must run even when the system checks fail.
+    requires_system_checks: list[str] = []
     help = "List the routes of the project, or show the details of one route."
 
     def add_arguments(self, parser: CommandParser) -> None:

@@ -96,6 +96,12 @@ def test_json():
     assert detail["methods"] == []
 
 
+def test_runs_even_when_system_checks_fail():
+    from kyro.management.commands.debug_router import Command
+
+    assert Command.requires_system_checks == []
+
+
 def test_default_urlconf():
     out = StringIO()
     call_command("debug_router", stdout=out)

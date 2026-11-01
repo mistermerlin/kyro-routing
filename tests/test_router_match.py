@@ -114,6 +114,12 @@ def test_agrees_with_real_requests(mount, client, path, method):
         assert response.content.decode() == result.route.name
 
 
+def test_command_runs_even_when_system_checks_fail():
+    from kyro.management.commands.router_match import Command
+
+    assert Command.requires_system_checks == []
+
+
 def test_command_match():
     output = run("/api/posts", "--method", "POST")
     assert "Route 'api:post_create' matches." in output

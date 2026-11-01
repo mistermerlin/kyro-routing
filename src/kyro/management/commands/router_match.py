@@ -7,6 +7,8 @@ from kyro.management.output import detail_rows, dumps, methods_label, pairs, wri
 
 
 class Command(BaseCommand):
+    # A diagnostic tool: it must run even when the system checks fail.
+    requires_system_checks: list[str] = []
     help = "Show which route serves a request to a path."
 
     def add_arguments(self, parser: CommandParser) -> None:
