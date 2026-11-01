@@ -58,7 +58,8 @@ class RouteSet:
 class Route:
     """A declared route, once merged with its class prefix.
 
-    Each URL pattern built by kyro carries its route as ``pattern.kyro_route``.
+    Each URL pattern built by kyro carries its route as ``pattern.kyro_route``, and as
+    ``pattern.kyro_group`` the routes sharing its path, in dispatch order.
     """
 
     path: str
@@ -167,12 +168,14 @@ class Router:
                 )
                 for route, compiled in members
             ]
+            group = tuple(route for route, _ in members)
             # Only the first pattern of a group is ever matched; the others exist so that
             # every route name can be reversed.
             for route, compiled in members:
                 view = make_view(handlers, compiled.defaults)
                 pattern = django_path(route_str, view, compiled.defaults, name=route.name)
                 pattern.kyro_route = route  # type: ignore[attr-defined]
+                pattern.kyro_group = group  # type: ignore[attr-defined]
                 patterns.append(pattern)
         return patterns
 

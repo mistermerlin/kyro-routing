@@ -120,6 +120,25 @@ $ python manage.py debug_router
 - `--show-views` adds the view of each route to the list, `--format json` outputs JSON and
   `--urlconf` inspects another URLconf than `ROOT_URLCONF`.
 
+`manage.py router_match` tells which route serves a request, method dispatch included:
+
+```text
+$ python manage.py router_match /blog --method POST
+ ------------- ---------- ------- --------------------
+  Name          Method     Path    Result
+ ------------- ---------- ------- --------------------
+  blog_index    GET|HEAD   /blog   method not allowed
+  blog_create   POST       /blog   match
+ ------------- ---------- ------- --------------------
+
+Route 'blog_create' matches.
+```
+
+It then shows the route in detail with the kwargs its view receives. Routes matching the
+path but not the method, or hidden by an earlier route (`shadowed`), are listed; `-v 2`
+lists every route. The command fails when no route serves the request (404 or 405).
+`--format json` and `--urlconf` work as for `debug_router`.
+
 ## Settings
 
 - `KYRO_DISCOVER` (default `["views"]`): app submodules imported by `kyro.discover()`.

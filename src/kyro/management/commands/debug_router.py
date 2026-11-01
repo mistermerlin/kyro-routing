@@ -1,8 +1,7 @@
-import json
-
 from django.core.management.base import BaseCommand, CommandError
 
-from kyro.inspection import RouteInfo, collect_routes
+from kyro.inspection import collect_routes
+from kyro.management.output import detail_rows, dumps, methods_label, write_table
 
 
 class Command(BaseCommand):
@@ -29,64 +28,19 @@ class Command(BaseCommand):
             if not routes:
                 raise CommandError(f"No route matches {name!r}.")
             if len(routes) == 1:
-                self._detail(routes[0], format)
+                if format == "json":
+                    self.stdout.write(dumps(routes[0].as_dict()))
+                else:
+                    write_table(self, ["Property", "Value"], detail_rows(routes[0]))
                 return
-        self._list(routes, format, show_views)
 
-    def _list(self, routes, format, show_views):
         if format == "json":
-            self.stdout.write(_dumps([route.as_dict() for route in routes]))
+            self.stdout.write(dumps([route.as_dict() for route in routes]))
             return
         headers = ["Name", "Method", "Path"] + (["View"] if show_views else [])
         rows = [
-            [route.name or "", _methods(route), route.path] + ([route.view] if show_views else [])
+            [route.name or "", methods_label(route.methods), route.path]
+            + ([route.view] if show_views else [])
             for route in routes
         ]
-        self._table(headers, rows)
-
-    def _detail(self, route: RouteInfo, format):
-        if format == "json":
-            self.stdout.write(_dumps(route.as_dict()))
-            return
-        rows = [
-            ["Name", route.name or ""],
-            ["Path", route.path],
-            ["Django routes", ", ".join(route.django_routes)],
-            ["Method", _methods(route)],
-            ["Requirements", _pairs(route.requirements)],
-            ["Defaults", _pairs(route.defaults)],
-            ["Priority", "-" if route.priority is None else str(route.priority)],
-            ["View", route.view],
-            ["Defined in", route.source or "-"],
-            ["Declared with", "kyro" if route.is_kyro else "Django"],
-        ]
-        self._table(["Property", "Value"], rows)
-
-    def _table(self, headers, rows):
-        widths = [max(len(cell) for cell in column) for column in zip(headers, *rows, strict=True)]
-        rule = " " + " ".join("-" * (width + 2) for width in widths)
-
-        def line(cells):
-            return (
-                " "
-                + " ".join(f" {c.ljust(w)} " for c, w in zip(cells, widths, strict=True)).rstrip()
-            )
-
-        self.stdout.write(rule)
-        self.stdout.write(self.style.MIGRATE_HEADING(line(headers)))
-        self.stdout.write(rule)
-        for row in rows:
-            self.stdout.write(line(row))
-        self.stdout.write(rule)
-
-
-def _methods(route: RouteInfo) -> str:
-    return "|".join(route.methods) or "ANY"
-
-
-def _pairs(values) -> str:
-    return ", ".join(f"{key}: {value}" for key, value in values.items()) or "-"
-
-
-def _dumps(data) -> str:
-    return json.dumps(data, indent=2, default=str)
+        write_table(self, headers, rows)
