@@ -5,9 +5,11 @@ kyro routes are described as declared; other routes as Django sees them.
 
 from __future__ import annotations
 
+import contextlib
 import inspect
 import os
-from collections.abc import Iterator
+import re
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field, replace
 from typing import Any
 from urllib.parse import urlsplit
@@ -22,6 +24,9 @@ MATCH = "match"
 METHOD_NOT_ALLOWED = "method not allowed"
 SHADOWED = "shadowed"
 NO_MATCH = "no match"
+
+# Characters ending the literal start of a route (parameters, regex syntax).
+_NOT_LITERAL = re.compile(r"[<>()\[\]{}*+?|\\^$.]")
 
 
 @dataclass(frozen=True)
@@ -76,8 +81,14 @@ class MatchResult:
     """Kwargs the view receives, before kyro's parameter conversion."""
     allowed: tuple[str, ...]
     """For ``METHOD_NOT_ALLOWED``: the methods the matching routes accept."""
-    trace: list[tuple[RouteInfo, str]]
-    """Every route with its status for this request, in matching order."""
+    _routes: list[RouteInfo] = field(repr=False)
+    _statuses: dict[int, str] = field(repr=False)
+    """Status of the routes matching the path, by index; the others are ``NO_MATCH``."""
+
+    @property
+    def trace(self) -> list[tuple[RouteInfo, str]]:
+        """Every route with its status for this request, in matching order."""
+        return [(info, self._statuses.get(i, NO_MATCH)) for i, info in enumerate(self._routes)]
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -99,81 +110,113 @@ class _Entry:
     pattern: URLPattern
     info: int
     """Index of its route in the route list."""
+    resolver: URLResolver
+    """Resolves paths against this pattern only, through the same include() prefixes."""
+    literal: str
+    """Literal start of the pattern: paths not starting with it cannot match."""
+
+
+class RouteTable:
+    """The routes of a URLconf (default ``ROOT_URLCONF``), in matching order."""
+
+    def __init__(self, urlconf: str | None = None) -> None:
+        self.routes, self._entries = _collect(urlconf)
+
+    def declarations(self) -> Iterator[tuple[RouteInfo, Route]]:
+        """Each kyro route of the URLconf with its declaration."""
+        seen: set[int] = set()
+        for entry in self._entries:
+            route = getattr(entry.pattern, "kyro_route", None)
+            if route is not None and entry.info not in seen:
+                seen.add(entry.info)
+                yield self.routes[entry.info], route
+
+    def match(self, path: str, method: str = "GET") -> MatchResult:
+        """Find the route serving a ``method`` request to ``path`` (a path or a full URL)."""
+        return self.match_methods(path, [method])[method.upper()]
+
+    def match_methods(self, path: str, methods: Iterable[str]) -> dict[str, MatchResult]:
+        """``match()`` for several methods, resolving the path only once."""
+        path = urlsplit(path).path or "/"
+        if not path.startswith("/"):
+            path = "/" + path
+        matches: list[tuple[_Entry, ResolverMatch]] = []
+        for entry in self._entries:
+            if not path.startswith(entry.literal):
+                continue
+            with contextlib.suppress(Resolver404):
+                matches.append((entry, entry.resolver.resolve(path)))
+        return {m.upper(): self._decide(path, m.upper(), matches) for m in methods}
+
+    def _decide(
+        self, path: str, method: str, matches: list[tuple[_Entry, ResolverMatch]]
+    ) -> MatchResult:
+        infos = self.routes
+        chosen: tuple[_Entry, ResolverMatch] | None = None
+        allowed: tuple[str, ...] = ()
+        if matches:
+            first = matches[0][0]
+            group = getattr(first.pattern, "kyro_group", None)
+            if group is None:
+                # Django calls the first matching view.
+                members = [matches[0]]
+                candidate: tuple[_Entry, ResolverMatch] | None = matches[0]
+            else:
+                # kyro dispatches to the first route of the group accepting the method.
+                members = [
+                    match
+                    for match in matches
+                    if match[0].chain == first.chain
+                    and getattr(match[0].pattern, "kyro_group", None) is group
+                ]
+                candidate = next(
+                    (
+                        match
+                        for route in group
+                        if not route.methods or method in route.methods
+                        for match in members
+                        if match[0].pattern.kyro_route is route  # type: ignore[attr-defined]
+                    ),
+                    None,
+                )
+            if candidate is not None and infos[candidate[0].info].accepts(method):
+                chosen = candidate
+            else:
+                methods = {m for entry, _ in members for m in infos[entry.info].methods}
+                allowed = tuple(sorted(methods))
+
+        statuses: dict[int, str] = {}
+        for entry, _ in reversed(matches):
+            accepts = infos[entry.info].accepts(method)
+            statuses[entry.info] = SHADOWED if accepts else METHOD_NOT_ALLOWED
+        if chosen is not None:
+            statuses[chosen[0].info] = MATCH
+
+        if chosen is not None:
+            status, route, kwargs = MATCH, infos[chosen[0].info], dict(chosen[1].kwargs)
+        else:
+            status = METHOD_NOT_ALLOWED if matches else NO_MATCH
+            route, kwargs = None, {}
+        return MatchResult(
+            path=path,
+            method=method,
+            status=status,
+            route=route,
+            kwargs=kwargs,
+            allowed=allowed,
+            _routes=infos,
+            _statuses=statuses,
+        )
 
 
 def collect_routes(urlconf: str | None = None) -> list[RouteInfo]:
     """The routes of ``urlconf`` (default ``ROOT_URLCONF``), in matching order."""
-    return _collect(urlconf)[0]
+    return RouteTable(urlconf).routes
 
 
 def match_route(path: str, method: str = "GET", urlconf: str | None = None) -> MatchResult:
     """Find the route serving a ``method`` request to ``path`` (a path or a full URL)."""
-    path = urlsplit(path).path or "/"
-    if not path.startswith("/"):
-        path = "/" + path
-    method = method.upper()
-    infos, entries = _collect(urlconf)
-
-    matches: list[tuple[_Entry, ResolverMatch]] = []
-    for entry in entries:
-        resolver_match = _resolve_alone(entry, path)
-        if resolver_match is not None:
-            matches.append((entry, resolver_match))
-
-    chosen: tuple[_Entry, ResolverMatch] | None = None
-    allowed: tuple[str, ...] = ()
-    if matches:
-        first = matches[0][0]
-        group = getattr(first.pattern, "kyro_group", None)
-        if group is None:
-            # Django calls the first matching view.
-            members = [matches[0]]
-            candidate: tuple[_Entry, ResolverMatch] | None = matches[0]
-        else:
-            # kyro dispatches to the first route of the group accepting the method.
-            members = [
-                match
-                for match in matches
-                if match[0].chain == first.chain
-                and getattr(match[0].pattern, "kyro_group", None) is group
-            ]
-            candidate = next(
-                (
-                    match
-                    for route in group
-                    if not route.methods or method in route.methods
-                    for match in members
-                    if match[0].pattern.kyro_route is route  # type: ignore[attr-defined]
-                ),
-                None,
-            )
-        if candidate is not None and infos[candidate[0].info].accepts(method):
-            chosen = candidate
-        else:
-            methods = {m for entry, _ in members for m in infos[entry.info].methods}
-            allowed = tuple(sorted(methods))
-
-    statuses = dict.fromkeys(range(len(infos)), NO_MATCH)
-    for entry, _ in reversed(matches):
-        accepts = infos[entry.info].accepts(method)
-        statuses[entry.info] = SHADOWED if accepts else METHOD_NOT_ALLOWED
-    if chosen is not None:
-        statuses[chosen[0].info] = MATCH
-
-    if chosen is not None:
-        status, route, kwargs = MATCH, infos[chosen[0].info], dict(chosen[1].kwargs)
-    else:
-        status = METHOD_NOT_ALLOWED if matches else NO_MATCH
-        route, kwargs = None, {}
-    return MatchResult(
-        path=path,
-        method=method,
-        status=status,
-        route=route,
-        kwargs=kwargs,
-        allowed=allowed,
-        trace=[(info, statuses[index]) for index, info in enumerate(infos)],
-    )
+    return RouteTable(urlconf).match(path, method)
 
 
 def _collect(urlconf: str | None) -> tuple[list[RouteInfo], list[_Entry]]:
@@ -185,7 +228,7 @@ def _collect(urlconf: str | None) -> tuple[list[RouteInfo], list[_Entry]]:
         name = f"{namespace}:{pattern.name}" if namespace and pattern.name else pattern.name
         route: Route | None = getattr(pattern, "kyro_route", None)
         if route is None:
-            entries.append(_Entry(chain, pattern, len(infos)))
+            entries.append(_entry(chain, pattern, len(infos), django_route))
             infos.append(
                 RouteInfo(
                     name=name,
@@ -204,10 +247,10 @@ def _collect(urlconf: str | None) -> tuple[list[RouteInfo], list[_Entry]]:
             index = seen[key]
             info = infos[index]
             infos[index] = replace(info, django_routes=(*info.django_routes, django_route))
-            entries.append(_Entry(chain, pattern, index))
+            entries.append(_entry(chain, pattern, index, django_route))
             continue
         seen[key] = len(infos)
-        entries.append(_Entry(chain, pattern, len(infos)))
+        entries.append(_entry(chain, pattern, len(infos), django_route))
         requirements, defaults = describe_path(route.path, route.requirements, route.defaults)
         infos.append(
             RouteInfo(
@@ -245,10 +288,11 @@ def _walk(
             yield chain, prefix, namespace, pattern
 
 
-def _resolve_alone(entry: _Entry, path: str) -> ResolverMatch | None:
-    """Resolve ``path`` against this pattern only, through the same include() prefixes."""
-    node: list[Any] = [entry.pattern]
-    for resolver in reversed(entry.chain):
+def _entry(
+    chain: tuple[URLResolver, ...], pattern: URLPattern, info: int, django_route: str
+) -> _Entry:
+    node: list[Any] = [pattern]
+    for resolver in reversed(chain):
         node = [
             URLResolver(
                 resolver.pattern,
@@ -258,10 +302,8 @@ def _resolve_alone(entry: _Entry, path: str) -> ResolverMatch | None:
                 resolver.namespace,
             )
         ]
-    try:
-        return URLResolver(RegexPattern(r"^/"), node).resolve(path)
-    except Resolver404:
-        return None
+    literal = _NOT_LITERAL.split(django_route, maxsplit=1)[0]
+    return _Entry(chain, pattern, info, URLResolver(RegexPattern(r"^/"), node), literal)
 
 
 def _clean(pattern: str) -> str:

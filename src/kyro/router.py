@@ -143,9 +143,13 @@ class Router:
                         import_module(f"{name}.{submodule}")
         return self.urlpatterns(modules)
 
+    def routes(self) -> list[Route]:
+        """The routes declared so far, merged with their class prefix, in declaration order."""
+        return list(self._collect())
+
     def urlpatterns(self, modules: Iterable[str] | None = None) -> list[URLPattern]:
         """Build the URL patterns of the routes declared so far."""
-        routes = list(self._collect())
+        routes = self.routes()
         if modules is not None:
             prefixes = tuple(modules)
             routes = [r for r in routes if _in_modules(r.module, prefixes)]

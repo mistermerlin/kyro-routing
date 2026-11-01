@@ -8,17 +8,27 @@ MOUNTED = "tests._mounted_urls"
 
 
 @pytest.fixture
-def mount(settings):
-    """Serve a router's routes as the root URLconf; returns the URL patterns."""
+def urlconf(settings):
+    """Serve the given URL patterns as the root URLconf."""
 
-    def _mount(router, modules=None):
+    def _install(patterns):
         module = types.ModuleType(MOUNTED)
-        module.urlpatterns = router.urlpatterns(modules)
+        module.urlpatterns = patterns
         sys.modules[MOUNTED] = module
         settings.ROOT_URLCONF = MOUNTED
         clear_url_caches()
-        return module.urlpatterns
+        return patterns
 
-    yield _mount
+    yield _install
     sys.modules.pop(MOUNTED, None)
     clear_url_caches()
+
+
+@pytest.fixture
+def mount(urlconf):
+    """Serve a router's routes as the root URLconf; returns the URL patterns."""
+
+    def _mount(router, modules=None):
+        return urlconf(router.urlpatterns(modules))
+
+    return _mount

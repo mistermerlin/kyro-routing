@@ -12,7 +12,7 @@ pip install kyro-routing   # or: uv add kyro-routing
 ```
 
 The package is imported as `kyro`. Add `"kyro"` to `INSTALLED_APPS` for the management
-commands.
+commands and the system checks.
 
 ## Quick start
 
@@ -147,6 +147,19 @@ It then shows the route in detail with the kwargs its view receives. Routes matc
 path but not the method, or hidden by an earlier route (`shadowed`), are listed; `-v 2`
 lists every route. The command fails when no route serves the request (404 or 405).
 `--format json` and `--urlconf` work as for `debug_router`.
+
+## System checks
+
+With `"kyro"` in `INSTALLED_APPS`, `manage.py check` (and `runserver`) warns about:
+
+| Id | Problem |
+|---|---|
+| `kyro.W001` | a route without parameters is served by an earlier route, for all or some of its methods (`/blog/{slug}` declared before `/blog/new`) |
+| `kyro.W002` | a route name is shared with other routes, so `reverse()` only returns one of them |
+| `kyro.W003` | routes declared with `@route` are not in the URLconf (`kyro.discover()` forgotten?) |
+| `kyro.W004` | a parameter has a default but is not trailing, so it cannot be omitted |
+
+Silence one with `SILENCED_SYSTEM_CHECKS = ["kyro.W003"]`.
 
 ## Settings
 

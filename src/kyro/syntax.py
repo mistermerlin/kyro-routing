@@ -144,6 +144,21 @@ def describe_path(
     )
 
 
+def ignored_defaults(
+    path: str,
+    requirements: Mapping[str, str] | None = None,
+    defaults: Mapping[str, Any] | None = None,
+) -> list[str]:
+    """Path parameters with a default that is never used, because they are not trailing."""
+    tokens, _ = _tokenize(path, requirements, defaults)
+    optional = set(_optional_indexes(tokens))
+    return [
+        token.name
+        for index, token in enumerate(tokens)
+        if isinstance(token, _Param) and token.optional and index not in optional
+    ]
+
+
 def _tokenize(
     path: str,
     requirements: Mapping[str, str] | None,
