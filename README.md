@@ -5,6 +5,15 @@ your views and controllers instead of maintaining a long `urls.py`.
 
 > Status: pre-alpha, under active development.
 
+## Installation
+
+```bash
+pip install kyro-routing   # or: uv add kyro-routing
+```
+
+The package is imported as `kyro`. Add `"kyro"` to `INSTALLED_APPS` for the management
+commands.
+
 ## Quick start
 
 ```python
