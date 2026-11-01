@@ -39,12 +39,12 @@ class BlogController:
     @route("", name="create", methods="POST")
     def create(self, request): ...
 
+    @route(r"/page/{page<\d+>?1}", name="list")  # before /{slug}, which would catch /page
+    def list(self, request, page: int): ...
+
     @route("/{slug}", name="show")
     def show(self, request, post: Post):  # fetched by slug, 404 if missing
         ...
-
-    @route(r"/page/{page<\d+>?1}", name="list")
-    def list(self, request, page: int): ...
 ```
 
 ```python
