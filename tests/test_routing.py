@@ -1,4 +1,5 @@
 import pytest
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpResponse
 from django.urls import reverse
@@ -112,6 +113,26 @@ def test_django_class_based_view(router, mount, client):
     mount(router)
     assert client.get("/about").content == b"about"
     assert client.post("/about").status_code == 405
+
+
+def test_methods_of_a_django_view_are_rejected(router):
+    """kyro would call them without View.dispatch(): mixins and authentication skipped."""
+
+    @router.route("/private", name="private_")
+    class Private(LoginRequiredMixin, View):
+        @router.route("", name="index")
+        def index(self, request):
+            return HttpResponse("secret")
+
+    with pytest.raises(ImproperlyConfigured, match=r"View\.dispatch\(\)"):
+        router.urlpatterns()
+
+
+def test_methods_of_an_undecorated_django_view_are_rejected():
+    from tests import view_methods
+
+    with pytest.raises(ImproperlyConfigured, match=r"View\.dispatch\(\)"):
+        view_methods.router.urlpatterns()
 
 
 def test_class_without_routes_is_rejected(router):

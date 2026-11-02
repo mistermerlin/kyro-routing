@@ -219,6 +219,12 @@ class Router:
             module = func.__module__
             auto_name = _slug(f"{module}.{func.__name__}")
         else:
+            if issubclass(owner, View):
+                raise ImproperlyConfigured(
+                    f"{owner.__qualname__}.{attr}: methods of a Django View cannot be routed, "
+                    "as kyro would call them without View.dispatch() (mixins, authentication, "
+                    "permissions). Route the class itself, or use a plain class as controller."
+                )
             view, signature = _method_view(owner, attr)
             prefix = self._prefix(owner)
             module = owner.__module__

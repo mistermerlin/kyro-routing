@@ -97,7 +97,8 @@ be stacked to give a view several routes.
   is a prefix (path, name, requirements, defaults, methods) for its methods. Classes defined
   inside a function must be decorated (`@route()` for no prefix).
 - A class with `__call__` and no routed method, or a Django `View`: the class route is the
-  route of the class itself.
+  route of the class itself. The methods of a Django `View` cannot be routed: kyro would call
+  them without `View.dispatch()`, skipping mixins, authentication and permissions.
 
 ## Parameter conversion
 
