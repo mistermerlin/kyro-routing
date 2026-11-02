@@ -219,6 +219,12 @@ class Router:
             module = func.__module__
             auto_name = _slug(f"{module}.{func.__name__}")
         else:
+            if issubclass(owner, View):
+                raise ImproperlyConfigured(
+                    f"{owner.__qualname__}.{attr}: methods of a Django View cannot be routed, "
+                    "as kyro would call them without View.dispatch() (mixins, authentication, "
+                    "permissions). Route the class itself, or use a plain class as controller."
+                )
             view, signature = _method_view(owner, attr)
             prefix = self._prefix(owner)
             module = owner.__module__
@@ -327,16 +333,34 @@ def _owner(func: Callable[..., Any], routes: RouteSet) -> tuple[type | None, str
     owner = _resolve(func.__module__, owner_path)
     member = inspect.getattr_static(owner, attr, None) if isinstance(owner, type) else None
     if getattr(member, ROUTES_ATTR, None) is not routes:
+        if member is not None:
+            raise ImproperlyConfigured(_hidden_message(func))
         raise ImproperlyConfigured(f"Cannot find the class defining {func.__module__}.{qualname}.")
     return owner, attr
 
 
 def _live(func: Callable[..., Any], routes: RouteSet) -> Callable[..., Any]:
-    """The module attribute ``func`` ended up as, so decorators above ``@route`` are kept."""
+    """The module attribute ``func`` ended up as, so decorators above ``@route`` are kept.
+
+    If that attribute does not carry the routes, a decorator above ``@route`` replaced the
+    function without ``functools.wraps``: routing ``func`` would skip that decorator.
+    """
     if "<locals>" in func.__qualname__:
         return func
-    live = _resolve(func.__module__, func.__qualname__.split("."))
-    return live if getattr(live, ROUTES_ATTR, None) is routes else func
+    live: Callable[..., Any] | None = _resolve(func.__module__, func.__qualname__.split("."))
+    if live is None:
+        return func
+    if getattr(live, ROUTES_ATTR, None) is not routes:
+        raise ImproperlyConfigured(_hidden_message(func))
+    return live
+
+
+def _hidden_message(func: Callable[..., Any]) -> str:
+    return (
+        f"{func.__module__}.{func.__qualname__}: a decorator above @route does not use "
+        "functools.wraps, so the route would serve the view without it. Put @route above "
+        "the other decorators, or use functools.wraps in the decorator."
+    )
 
 
 def _resolve(module: str, path: list[str]) -> Any:

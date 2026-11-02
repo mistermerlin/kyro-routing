@@ -7,6 +7,19 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Views sharing a path lost `csrf_exempt` and `login_not_required`: the path was CSRF
+  checked, and login required, even when all its views were exempt. This broke, for
+  instance, Django REST Framework views authenticated by token. The path now keeps a marker
+  when all its views have it.
+- A decorator above `@route` that does not use `functools.wraps` (Django REST Framework's
+  `@api_view`, for instance) was silently skipped: the route served the undecorated view.
+  Such a route now raises `ImproperlyConfigured`, for functions and methods alike.
+- Routed methods of a Django `View` subclass were called without `View.dispatch()`, so
+  mixins such as `LoginRequiredMixin`, and Django REST Framework authentication and
+  permissions, did not run. They now raise `ImproperlyConfigured`.
+
 ## [0.1.0] - 2026-11-01
 
 First release.

@@ -84,16 +84,45 @@ Trailing parameters with a default (inline or in `defaults=`) are optional:
 | `priority` | higher priority routes are matched first; otherwise declaration order |
 
 Several routes may share a path with different `methods`: kyro dispatches each request to
-the right view. `@route` can be stacked to give a view several routes.
+the right view. The path is exempt from CSRF checks (`csrf_exempt`) or from
+`LoginRequiredMiddleware` (`login_not_required`) only when all its views are. `@route` can
+be stacked to give a view several routes.
 
 ## What can be routed
 
-- Functions, sync or async. Put `@route` above or below other decorators.
+- Functions, sync or async. Put `@route` above other decorators, or below decorators that
+  use `functools.wraps`. A route hidden by a decorator that does not is refused
+  (`ImproperlyConfigured`): it would serve the view without that decorator.
 - Methods of any class: the class is instantiated for each request. A `@route` on the class
   is a prefix (path, name, requirements, defaults, methods) for its methods. Classes defined
   inside a function must be decorated (`@route()` for no prefix).
 - A class with `__call__` and no routed method, or a Django `View`: the class route is the
-  route of the class itself.
+  route of the class itself. The methods of a Django `View` cannot be routed: kyro would call
+  them without `View.dispatch()`, skipping mixins, authentication and permissions.
+
+## Django REST Framework
+
+Put `@route` on `APIView` and generic view classes, and let them handle the HTTP methods
+(no `methods=`): authentication, permissions, CSRF, error responses (400 to 405) and
+schema generation work as usual.
+
+```python
+from rest_framework.generics import RetrieveUpdateAPIView
+
+
+@route("/members/<uuid:pk>", name="member")
+class MemberDetail(RetrieveUpdateAPIView):
+    queryset = Member.objects.all()
+    serializer_class = MemberSerializer
+```
+
+- With `methods=`, kyro answers the other methods itself, with a plain Django 405, and
+  schema generators still list them.
+- `@route` may be put above `@api_view`, not below it (`@api_view` does not use
+  `functools.wraps`).
+- The methods of an `APIView` cannot be routed, and viewsets are not supported: route one
+  view class per path.
+- kyro converts no parameter for view classes: use Django converters (`<uuid:pk>`).
 
 ## Parameter conversion
 
