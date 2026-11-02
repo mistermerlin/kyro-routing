@@ -7,6 +7,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-02
+
 ### Fixed
 
 - Views sharing a path lost `csrf_exempt` and `login_not_required`: the path was CSRF
@@ -46,5 +48,6 @@ First release.
   missing from the URLconf (`kyro.W003`) and ignored defaults (`kyro.W004`).
 - Support for Python 3.10 to 3.14 and Django 4.2, 5.2, 6.0 and 6.1.
 
-[Unreleased]: https://github.com/mistermerlin/kyro-routing/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/mistermerlin/kyro-routing/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/mistermerlin/kyro-routing/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/mistermerlin/kyro-routing/releases/tag/v0.1.0
