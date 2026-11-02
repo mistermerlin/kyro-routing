@@ -7,6 +7,13 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Views sharing a path lost `csrf_exempt` and `login_not_required`: the path was CSRF
+  checked, and login required, even when all its views were exempt. This broke, for
+  instance, Django REST Framework views authenticated by token. The path now keeps a marker
+  when all its views have it.
+
 ## [0.1.0] - 2026-11-01
 
 First release.

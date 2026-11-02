@@ -84,7 +84,9 @@ Trailing parameters with a default (inline or in `defaults=`) are optional:
 | `priority` | higher priority routes are matched first; otherwise declaration order |
 
 Several routes may share a path with different `methods`: kyro dispatches each request to
-the right view. `@route` can be stacked to give a view several routes.
+the right view. The path is exempt from CSRF checks (`csrf_exempt`) or from
+`LoginRequiredMiddleware` (`login_not_required`) only when all its views are. `@route` can
+be stacked to give a view several routes.
 
 ## What can be routed
 

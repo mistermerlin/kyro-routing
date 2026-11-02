@@ -69,4 +69,26 @@ def make_view(handlers: list[Handler], own_defaults: Mapping[str, Any]) -> Calla
 
     if len(handlers) == 1:
         functools.update_wrapper(view, handlers[0].view)
+    else:
+        _share_markers(view, handlers)
     return view
+
+
+# View attributes read by Django middleware to lift a protection from a view:
+# ``csrf_exempt`` (CsrfViewMiddleware) and ``login_required = False``
+# (LoginRequiredMiddleware, set by ``login_not_required``).
+_MARKERS = ("csrf_exempt", "login_required")
+_MISSING = object()
+
+
+def _share_markers(view: Callable[..., Any], handlers: list[Handler]) -> None:
+    """Give the view of a shared path the markers all its handlers agree on.
+
+    The middleware only sees this view, not the handler it calls. A marker set by some
+    handlers only is left out, so a path is never less protected than its most protected
+    handler.
+    """
+    for marker in _MARKERS:
+        values = [getattr(handler.view, marker, _MISSING) for handler in handlers]
+        if values[0] is not _MISSING and all(value == values[0] for value in values):
+            setattr(view, marker, values[0])
