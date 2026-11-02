@@ -100,6 +100,30 @@ be stacked to give a view several routes.
   route of the class itself. The methods of a Django `View` cannot be routed: kyro would call
   them without `View.dispatch()`, skipping mixins, authentication and permissions.
 
+## Django REST Framework
+
+Put `@route` on `APIView` and generic view classes, and let them handle the HTTP methods
+(no `methods=`): authentication, permissions, CSRF, error responses (400 to 405) and
+schema generation work as usual.
+
+```python
+from rest_framework.generics import RetrieveUpdateAPIView
+
+
+@route("/members/<uuid:pk>", name="member")
+class MemberDetail(RetrieveUpdateAPIView):
+    queryset = Member.objects.all()
+    serializer_class = MemberSerializer
+```
+
+- With `methods=`, kyro answers the other methods itself, with a plain Django 405, and
+  schema generators still list them.
+- `@route` may be put above `@api_view`, not below it (`@api_view` does not use
+  `functools.wraps`).
+- The methods of an `APIView` cannot be routed, and viewsets are not supported: route one
+  view class per path.
+- kyro converts no parameter for view classes: use Django converters (`<uuid:pk>`).
+
 ## Parameter conversion
 
 Annotated view arguments are converted from the URL:
