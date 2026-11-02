@@ -13,6 +13,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   checked, and login required, even when all its views were exempt. This broke, for
   instance, Django REST Framework views authenticated by token. The path now keeps a marker
   when all its views have it.
+- A decorator above `@route` that does not use `functools.wraps` (Django REST Framework's
+  `@api_view`, for instance) was silently skipped: the route served the undecorated view.
+  Such a route now raises `ImproperlyConfigured`, for functions and methods alike.
 
 ## [0.1.0] - 2026-11-01
 

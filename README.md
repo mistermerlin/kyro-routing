@@ -90,7 +90,9 @@ be stacked to give a view several routes.
 
 ## What can be routed
 
-- Functions, sync or async. Put `@route` above or below other decorators.
+- Functions, sync or async. Put `@route` above other decorators, or below decorators that
+  use `functools.wraps`. A route hidden by a decorator that does not is refused
+  (`ImproperlyConfigured`): it would serve the view without that decorator.
 - Methods of any class: the class is instantiated for each request. A `@route` on the class
   is a prefix (path, name, requirements, defaults, methods) for its methods. Classes defined
   inside a function must be decorated (`@route()` for no prefix).
